@@ -1,0 +1,134 @@
+import sqlj.runtime.*;
+import java.io.*
+import java.sql.*;
+
+#sql context Ctx;
+#sql iterator TwoStringsIterator(String, String);
+#sql iterator MitDauerIterator(String mitarbeiter, double dauer);
+#sql iterator ManagAlterIterator(String manag, int alter);
+
+public class SQLJUebung
+{
+	public static String readProject() 
+	{
+		System.out.print("Projekt: ");
+		String p = in.readLine();
+	}
+	
+	//Aufgabe 1.1a)
+	public static void salary (String projectNumber) 
+	{
+		double sal;
+		#sql [ctx] 
+		
+			SELECT AVG(SALARY) INTO :sal
+				FROM ( 
+					SELECT DISTINCT e.EMPNO, SALARY
+					FROM EMPLOYEE e, EMP_ACT ea, Project p
+					WHERE e.EMPNO = ea.EMPNO AND ea.EMPNO = p.EMPNO AND p.PROJNO = :projectNumber 
+					)
+		};
+		System.out.println("Durchschnittsgehalt: " + sal);
+	}
+	
+	//Aufgabe 1.1b)
+	public static void nameAbt(String projectNumber) 
+	{
+		TwoStringsIterator mitarbeiter;
+		
+		#sql [ctx] mitarbeiter = 
+		{
+			SELECT DISTINCT e.FIRSTNME ||' '|| e.LASTNAME, d.DEPTNAME
+			FROM EMPLOYEE e, EMP_ACT ea, Project p, DEPARTMENT d
+			WHERE e.EMPNO = ea.EMPNO AND ea.EMPNO = p.EMPNO AND p.PROJNO = :projectNumber AND e.WORKDEPT = d.DEPTNO
+		};
+		
+		String abtName = null;
+		String mitName = null;
+		
+		#sql 
+		{ 
+			FETCH :mitarbeiter INTO :mitName, :abtName  
+		};
+		
+		while (!mitarbeiter.endFetch()) 
+		{
+			System.out.println("* " + mitName + ", " + abtName );
+			#sql 
+			{ 
+				FETCH :mitarbeiter INTO :mitName, :abtName  
+			};
+		}
+		mitarbeiter.close();
+	}
+	
+	
+	//Aufgabe 1.1c)
+	public static void nameDate(String projectNumber)
+	{
+		MitDauerIterator mitarbeiter;
+		
+		#sql [ctx] mitarbeiter = 
+		{
+			SELECT e.FIRSTNME ||' '|| e.LASTNAME AS mitarbeiter, SUM(DATE_DIFF(EMSTDATE, EMENDATE)*EMPTIME) AS dauer
+			FROM EMPLOYEE e, EMP_ACT ea, Project p
+			WHERE e.EMPNO = ea.EMPNO AND ea.EMPNO = p.EMPNO AND p.PROJNO = :projectNumber
+			GROUP BY FIRSTNME, LASTNAME
+		};
+			
+		while (mitarbeiter.next()) 
+		{
+			System.out.println("* " + mitarbeiter.mitarbeiter() + ": " + mitarbeiter.dauer() + " Tage");
+		}
+	}
+	
+	//Aufgabe 1.2
+	public static void nameGeb()
+	{
+		ManagAlterIterator manag;
+		#sql [ctx] manag = 
+		{
+			SELECT DISTINCT mg.firstnme ||' '|| mg.lastname manager, year(mg.birthdate) alter
+			FROM employee e, department d, employee mg
+			WHERE e.workdept = d.deptno AND d.mgrno = mg.empno AND e.birthdate > mg.birthdate
+		};
+			
+		while (manag.next()) 
+		{
+			System.out.println("* " + manag.manager() + ", geboren in " + manag.alter());
+		}
+	}
+	
+	public static void main(String[] args)
+	{
+		Class.forName("com.ibm.db2.jcc.DB2Driver");
+		ctx = new Ctx("jdbc:db2:sample", true);
+		String projectNumber;
+		
+		while ((projectNumber = readProject()) != null) 
+		{   
+		salary(projectNumber);
+		System.out.println("*****-----*****");
+		nameAbt(projectNumber);
+		System.out.println("*****-----*****");
+		nameDate(projectNumber);
+		}
+		
+		nameGeb();
+		ctx.close();
+	}
+}
+
+/*
+Aufgabe 3.1
+b) db2profc
+e) db2sqljcustomize
+
+
+Aufgabe 3.2
+a) db2sqljcustomize
+
+
+Aufgabe 3.3
+c)   Ausführen von dynamischen Abfragen auf einer DB2 Datenbank
+*/
